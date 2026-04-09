@@ -3,36 +3,34 @@ import { NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const { pdfUrl, logoUrl, size, opacity, rotation } = await request.json()
+    const formData = await request.formData()
 
-    if (!pdfUrl || !logoUrl) {
-      return Response.json({ error: 'Missing pdfUrl or logoUrl' }, { status: 400 })
+    const pdfFile = formData.get('pdf') as File | null
+    const logoFile = formData.get('logo') as File | null
+    const size = Number(formData.get('size') ?? 80)
+    const opacity = Number(formData.get('opacity') ?? 30)
+    const rotation = Number(formData.get('rotation') ?? 20)
+
+    if (!pdfFile || !logoFile) {
+      return Response.json({ error: 'Both a PDF and a logo file are required.' }, { status: 400 })
     }
 
     const [pdfBuffer, logoBuffer] = await Promise.all([
-      fetch(pdfUrl).then((r) => {
-        if (!r.ok) throw new Error(`Failed to fetch PDF: ${r.status} ${r.statusText}`)
-        return r.arrayBuffer()
-      }),
-      fetch(logoUrl).then((r) => {
-        if (!r.ok) throw new Error(`Failed to fetch logo: ${r.status} ${r.statusText}`)
-        return r.arrayBuffer()
-      }),
+      pdfFile.arrayBuffer(),
+      logoFile.arrayBuffer(),
     ])
 
     const pdfDoc = await PDFDocument.load(pdfBuffer)
 
-    // Support both PNG and JPEG logos
-    const isJpeg =
-      logoUrl.toLowerCase().includes('.jpg') || logoUrl.toLowerCase().includes('.jpeg')
+    const logoName = logoFile.name.toLowerCase()
+    const isJpeg = logoName.endsWith('.jpg') || logoName.endsWith('.jpeg')
     const logoImage = isJpeg
       ? await pdfDoc.embedJpg(new Uint8Array(logoBuffer))
       : await pdfDoc.embedPng(new Uint8Array(logoBuffer))
 
     const { width: imgW, height: imgH } = logoImage.scale(1)
 
-    const pages = pdfDoc.getPages()
-    for (const page of pages) {
+    for (const page of pdfDoc.getPages()) {
       const { width, height } = page.getSize()
       const logoWidth = width * (size / 100)
       const logoHeight = logoWidth * (imgH / imgW)
@@ -40,10 +38,9 @@ export async function POST(request: NextRequest) {
       const cx = width / 2
       const cy = height / 2
 
-      // Rotate around the center of the image.
-      // pdf-lib rotates around the image's bottom-left corner, so we adjust
-      // the origin so the image center lands on the page center after rotation.
-      // We negate rotation to match the CSS clockwise convention in the preview.
+      // Rotate around the image center. pdf-lib rotates around the bottom-left
+      // corner, so we adjust the origin so the center lands on the page center.
+      // Negate rotation to match CSS clockwise convention used in the preview.
       const rad = ((-rotation) * Math.PI) / 180
       const originX = cx - (logoWidth / 2) * Math.cos(rad) + (logoHeight / 2) * Math.sin(rad)
       const originY = cy - (logoWidth / 2) * Math.sin(rad) - (logoHeight / 2) * Math.cos(rad)

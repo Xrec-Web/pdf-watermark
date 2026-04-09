@@ -13,42 +13,21 @@ const DEFAULT_SETTINGS: Settings = { size: 80, opacity: 30, rotation: 20 }
 export default function Home() {
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [logoFile, setLogoFile] = useState<File | null>(null)
-
-  // Blob Storage URLs (for server-side processing)
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
-  const [logoBlobUrl, setLogoBlobUrl] = useState<string | null>(null)
-
-  // Local preview URLs
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
-
-  // Canvas dimensions (used to size the CSS overlay correctly)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
-
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
-  const [uploadingPdf, setUploadingPdf] = useState(false)
-  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [renderingPdf, setRenderingPdf] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const previewContainerRef = useRef<HTMLDivElement>(null)
 
-  // ─── Helpers ───────────────────────────────────────────────────────────────
-
-  const uploadToBlob = async (file: File, type: 'pdf' | 'logo'): Promise<string> => {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('type', type)
-    const res = await fetch('/api/upload', { method: 'POST', body: formData })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Upload failed')
-    return data.url as string
-  }
+  // ─── Render PDF first page to canvas ───────────────────────────────────────
 
   const renderPdfToCanvas = useCallback(async (file: File) => {
     const objectUrl = URL.createObjectURL(file)
     try {
-      // Dynamic import keeps pdfjs out of the server bundle
       const pdfjsLib = await import('pdfjs-dist')
       pdfjsLib.GlobalWorkerOptions.workerSrc =
         `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
@@ -79,54 +58,48 @@ export default function Home() {
   // ─── Event handlers ────────────────────────────────────────────────────────
 
   const handlePdfDrop = async (file: File) => {
-    if (!file.name.endsWith('.pdf')) {
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
       setError('Please upload a PDF file.')
       return
     }
     setError(null)
     setPdfFile(file)
-    setUploadingPdf(true)
+    setRenderingPdf(true)
     try {
       await renderPdfToCanvas(file)
-      const url = await uploadToBlob(file, 'pdf')
-      setPdfBlobUrl(url)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate PDF. Please try again.')
+      setError(err instanceof Error ? err.message : 'Failed to render PDF preview.')
     } finally {
-      setUploadingPdf(false)
+      setRenderingPdf(false)
     }
   }
 
-  const handleLogoDrop = async (file: File) => {
+  const handleLogoDrop = (file: File) => {
     setError(null)
     setLogoFile(file)
-    const preview = URL.createObjectURL(file)
-    setLogoPreviewUrl(preview)
-    setUploadingLogo(true)
-    try {
-      const url = await uploadToBlob(file, 'logo')
-      setLogoBlobUrl(url)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upload logo.')
-    } finally {
-      setUploadingLogo(false)
-    }
+    if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl)
+    setLogoPreviewUrl(URL.createObjectURL(file))
   }
 
   const handleDownload = async () => {
-    if (!pdfBlobUrl || !logoBlobUrl) return
+    if (!pdfFile || !logoFile) return
     setIsDownloading(true)
     setError(null)
     try {
-      const res = await fetch('/api/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdfUrl: pdfBlobUrl, logoUrl: logoBlobUrl, ...settings }),
-      })
+      const form = new FormData()
+      form.append('pdf', pdfFile)
+      form.append('logo', logoFile)
+      form.append('size', String(settings.size))
+      form.append('opacity', String(settings.opacity))
+      form.append('rotation', String(settings.rotation))
+
+      const res = await fetch('/api/process', { method: 'POST', body: form })
+
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error || `Server error: ${res.status}`)
       }
+
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -146,9 +119,7 @@ export default function Home() {
   const setSetting = <K extends keyof Settings>(key: K, value: Settings[K]) =>
     setSettings((s) => ({ ...s, [key]: value }))
 
-  const isReady = !!pdfBlobUrl && !!logoBlobUrl
-
-  // Logo overlay width in pixels relative to canvas
+  const isReady = !!pdfFile && !!logoFile
   const overlayWidthPx = canvasSize.width * (settings.size / 100)
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -173,18 +144,6 @@ export default function Home() {
           <line x1="19" y1="8" x2="19" y2="20" stroke="white" strokeWidth="2" strokeLinecap="round" />
         </svg>
         <span style={{ fontWeight: 700, fontSize: 18 }}>PDF Watermark</span>
-        <span
-          style={{
-            marginLeft: 8,
-            fontSize: 12,
-            background: '#1e2433',
-            color: '#7c8db5',
-            borderRadius: 4,
-            padding: '2px 8px',
-          }}
-        >
-          beta
-        </span>
       </header>
 
       <main style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px' }}>
@@ -214,25 +173,23 @@ export default function Home() {
         >
           {/* ── Left panel ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* PDF upload */}
             <DropZone
               label="PDF Document"
               accept=".pdf"
               icon="📄"
               hint="A4 or any size PDF"
               file={pdfFile}
-              loading={uploadingPdf}
+              loading={renderingPdf}
               onFile={handlePdfDrop}
             />
 
-            {/* Logo upload */}
             <DropZone
               label="Watermark Logo"
               accept=".png,.jpg,.jpeg"
               icon="🖼"
               hint="PNG or JPEG image"
               file={logoFile}
-              loading={uploadingLogo}
+              loading={false}
               onFile={handleLogoDrop}
             />
 
@@ -300,9 +257,7 @@ export default function Home() {
                 }}
               >
                 {isDownloading ? (
-                  <>
-                    <Spinner /> Processing…
-                  </>
+                  <><Spinner /> Processing…</>
                 ) : (
                   <>↓ Download Watermarked PDF</>
                 )}
@@ -342,7 +297,6 @@ export default function Home() {
               ref={previewContainerRef}
               style={{ position: 'relative', width: '100%', lineHeight: 0 }}
             >
-              {/* PDF canvas */}
               {!pdfFile && (
                 <div
                   style={{
@@ -394,13 +348,13 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Uploading spinner overlay */}
-              {(uploadingPdf || uploadingLogo) && (
+              {/* Processing overlay */}
+              {(renderingPdf || isDownloading) && (
                 <div
                   style={{
                     position: 'absolute',
                     inset: 0,
-                    background: 'rgba(15,17,23,0.7)',
+                    background: 'rgba(15,17,23,0.75)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -409,7 +363,7 @@ export default function Home() {
                     gap: 10,
                   }}
                 >
-                  <Spinner /> Uploading…
+                  <Spinner /> {isDownloading ? 'Generating PDF…' : 'Rendering…'}
                 </div>
               )}
             </div>
@@ -423,13 +377,7 @@ export default function Home() {
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function DropZone({
-  label,
-  accept,
-  icon,
-  hint,
-  file,
-  loading,
-  onFile,
+  label, accept, icon, hint, file, loading, onFile,
 }: {
   label: string
   accept: string
@@ -442,20 +390,14 @@ function DropZone({
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
 
-  const handle = (f: File | undefined) => {
-    if (f) onFile(f)
-  }
+  const handle = (f: File | undefined) => { if (f) onFile(f) }
 
   return (
     <div
       onClick={() => inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
       onDragLeave={() => setDragging(false)}
-      onDrop={(e) => {
-        e.preventDefault()
-        setDragging(false)
-        handle(e.dataTransfer.files[0])
-      }}
+      onDrop={(e) => { e.preventDefault(); setDragging(false); handle(e.dataTransfer.files[0]) }}
       style={{
         background: dragging ? '#1a2240' : '#131720',
         border: `2px dashed ${dragging ? '#4f6ef7' : file ? '#2a4070' : '#1e2433'}`,
@@ -477,15 +419,10 @@ function DropZone({
       />
       <div
         style={{
-          width: 44,
-          height: 44,
-          borderRadius: 10,
+          width: 44, height: 44, borderRadius: 10,
           background: file ? '#162040' : '#1e2433',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 22,
-          flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 22, flexShrink: 0,
         }}
       >
         {loading ? <Spinner /> : icon}
@@ -493,21 +430,11 @@ function DropZone({
       <div style={{ minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{label}</div>
         {file ? (
-          <div
-            style={{
-              fontSize: 12,
-              color: '#4f6ef7',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
+          <div style={{ fontSize: 12, color: '#4f6ef7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {file.name}
           </div>
         ) : (
-          <div style={{ fontSize: 12, color: '#7c8db5' }}>
-            Drop here or click · {hint}
-          </div>
+          <div style={{ fontSize: 12, color: '#7c8db5' }}>Drop here or click · {hint}</div>
         )}
       </div>
     </div>
@@ -515,53 +442,25 @@ function DropZone({
 }
 
 function SliderControl({
-  label,
-  value,
-  min,
-  max,
-  unit,
-  onChange,
+  label, value, min, max, unit, onChange,
 }: {
-  label: string
-  value: number
-  min: number
-  max: number
-  unit: string
-  onChange: (v: number) => void
+  label: string; value: number; min: number; max: number; unit: string; onChange: (v: number) => void
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 13, color: '#c8d4f0' }}>{label}</span>
-        <span
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: '#4f6ef7',
-            minWidth: 50,
-            textAlign: 'right',
-          }}
-        >
-          {value}
-          {unit}
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#4f6ef7', minWidth: 50, textAlign: 'right' }}>
+          {value}{unit}
         </span>
       </div>
       <input
-        type="range"
-        min={min}
-        max={max}
-        value={value}
+        type="range" min={min} max={max} value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={{
-          width: '100%',
-          accentColor: '#4f6ef7',
-          height: 4,
-          cursor: 'pointer',
-        }}
+        style={{ width: '100%', accentColor: '#4f6ef7', height: 4, cursor: 'pointer' }}
       />
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#3a4560' }}>
-        <span>{min}{unit}</span>
-        <span>{max}{unit}</span>
+        <span>{min}{unit}</span><span>{max}{unit}</span>
       </div>
     </div>
   )
@@ -569,13 +468,7 @@ function SliderControl({
 
 function Spinner() {
   return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      style={{ animation: 'spin 0.8s linear infinite' }}
-    >
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ animation: 'spin 0.8s linear infinite' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       <circle cx="8" cy="8" r="6" stroke="#4f6ef7" strokeWidth="2" strokeDasharray="28" strokeDashoffset="10" />
     </svg>
