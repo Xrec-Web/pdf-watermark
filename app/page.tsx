@@ -143,25 +143,8 @@ export default function Home() {
         </span>
 
         {/* Powered by xrecruiter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13, color: '#7c8db5', fontWeight: 400 }}>Powered by</span>
-          {/* xrecruiter X mark — 5 overlapping circles */}
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            {/* top: purple */}
-            <circle cx="16" cy="6"  r="6.5" fill="#5b4fcf" />
-            {/* right: blue */}
-            <circle cx="26" cy="13" r="6.5" fill="#4a8fe8" />
-            {/* left: teal */}
-            <circle cx="6"  cy="19" r="6.5" fill="#1dbfb0" />
-            {/* bottom-right: pink */}
-            <circle cx="22" cy="26" r="6.5" fill="#e8367c" />
-            {/* bottom-center: orange */}
-            <circle cx="12" cy="26" r="6.5" fill="#f5a020" />
-          </svg>
-          <span style={{ fontSize: 15, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' }}>
-            xrecruiter
-          </span>
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/XR-PoweredByWhite.png" alt="Powered by xrecruiter" style={{ height: 28 }} />
       </header>
 
       <main style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px' }}>
