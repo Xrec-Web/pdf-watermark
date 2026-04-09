@@ -8,7 +8,7 @@ interface Settings {
   rotation: number  // –180 to 180 degrees
 }
 
-const DEFAULT_SETTINGS: Settings = { size: 80, opacity: 30, rotation: 20 }
+const DEFAULT_SETTINGS: Settings = { size: 80, opacity: 30, rotation: -20 }
 
 export default function Home() {
   const [pdfFile, setPdfFile] = useState<File | null>(null)
@@ -132,18 +132,36 @@ export default function Home() {
           borderBottom: '1px solid #1e2433',
           background: '#131720',
           padding: '0 24px',
-          height: 60,
+          height: 64,
           display: 'flex',
           alignItems: 'center',
-          gap: 12,
+          justifyContent: 'space-between',
         }}
       >
-        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-          <rect width="28" height="28" rx="6" fill="#4f6ef7" />
-          <path d="M8 20V8l10 6-10 6z" fill="white" />
-          <line x1="19" y1="8" x2="19" y2="20" stroke="white" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-        <span style={{ fontWeight: 700, fontSize: 18 }}>PDF Watermark</span>
+        <span style={{ fontWeight: 700, fontSize: 20, letterSpacing: '-0.01em' }}>
+          Golden Invoice Studio
+        </span>
+
+        {/* Powered by xrecruiter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13, color: '#7c8db5', fontWeight: 400 }}>Powered by</span>
+          {/* xrecruiter X mark — 5 overlapping circles */}
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            {/* top: purple */}
+            <circle cx="16" cy="6"  r="6.5" fill="#5b4fcf" />
+            {/* right: blue */}
+            <circle cx="26" cy="13" r="6.5" fill="#4a8fe8" />
+            {/* left: teal */}
+            <circle cx="6"  cy="19" r="6.5" fill="#1dbfb0" />
+            {/* bottom-right: pink */}
+            <circle cx="22" cy="26" r="6.5" fill="#e8367c" />
+            {/* bottom-center: orange */}
+            <circle cx="12" cy="26" r="6.5" fill="#f5a020" />
+          </svg>
+          <span style={{ fontSize: 15, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' }}>
+            xrecruiter
+          </span>
+        </div>
       </header>
 
       <main style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px' }}>

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'PDF Watermark Tool',
+  title: 'Golden Invoice Studio',
   description: 'Add a logo watermark to your PDF files',
 }
 
