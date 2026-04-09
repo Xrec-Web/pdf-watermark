@@ -40,8 +40,8 @@ export default function Home() {
     formData.append('file', file)
     formData.append('type', type)
     const res = await fetch('/api/upload', { method: 'POST', body: formData })
-    if (!res.ok) throw new Error('Upload failed')
     const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Upload failed')
     return data.url as string
   }
 
@@ -90,8 +90,8 @@ export default function Home() {
       await renderPdfToCanvas(file)
       const url = await uploadToBlob(file, 'pdf')
       setPdfBlobUrl(url)
-    } catch {
-      setError('Failed to process PDF. Please try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate PDF. Please try again.')
     } finally {
       setUploadingPdf(false)
     }
@@ -106,8 +106,8 @@ export default function Home() {
     try {
       const url = await uploadToBlob(file, 'logo')
       setLogoBlobUrl(url)
-    } catch {
-      setError('Failed to upload logo. Please try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload logo.')
     } finally {
       setUploadingLogo(false)
     }
@@ -123,7 +123,10 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pdfUrl: pdfBlobUrl, logoUrl: logoBlobUrl, ...settings }),
       })
-      if (!res.ok) throw new Error('Processing failed')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || `Server error: ${res.status}`)
+      }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -133,8 +136,8 @@ export default function Home() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-    } catch {
-      setError('Failed to generate PDF. Please try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate PDF.')
     } finally {
       setIsDownloading(false)
     }
